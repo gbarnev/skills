@@ -34,6 +34,12 @@ against official documentation when network access is available.
 Start with this ownership model and adapt domain names to the product:
 
 ```text
+AGENTS.md                       # application and repository instructions
+CLAUDE.md                       # contains @AGENTS.md
+.agents/
+└── skills/                       # canonical project Agent Skills
+.claude/
+└── skills/                       # symlinks to .agents/skills/*
 drizzle/                        # generated migrations + meta, committed
 src/
 ├── app/
@@ -278,8 +284,18 @@ either tool is used alone.
 
 ## Finish the foundation
 
-Create a root `AGENTS.md` that records:
+Configure the repository for AI-enabled development. Treat AI instructions as
+part of the architecture: keep them current when domain language, boundaries,
+commands, or invariants change.
 
+Always create a root `AGENTS.md` that records:
+
+- the application's main goal, key user workflows, and important product
+  constraints;
+- the domain objects and ubiquitous language, including ownership,
+  relationships, lifecycle, and invariants;
+- the system design and architecture, including dependency boundaries, request
+  and data flow, integration points, and major design decisions;
 - the selected technologies and pinned package manager;
 - the route-first frontend and domain-first API boundaries;
 - the API-first, Zod contract, and React Query Advanced SSR rules;
@@ -288,11 +304,49 @@ Create a root `AGENTS.md` that records:
 - Drizzle-owned migration and connection conventions;
 - environment variables and validation commands.
 
-Create `CLAUDE.md` containing exactly:
+Keep this file operational and specific to the application. Link to detailed
+ADRs when needed instead of turning `AGENTS.md` into a historical narrative.
+
+Create a root `CLAUDE.md` containing exactly:
 
 ```text
 @AGENTS.md
 ```
+
+For every substantial module introduced by a larger implementation, add
+`<module>/AGENTS.md` and `<module>/CLAUDE.md`. A module may be a product-domain,
+integration, or independently owned application boundary; do not add these
+files to every small utility or route folder. The module `AGENTS.md` supplements
+the root instructions and documents:
+
+- the module's main goal, responsibilities, non-goals, and importance to the
+  application;
+- its domain objects, terminology, state transitions, relationships, and
+  invariants;
+- its public contracts, entry points, dependencies, and owned persistence;
+- its internal system design, data flow, authorization rules, failure modes,
+  and architectural constraints;
+- the relevant file map, implementation conventions, and focused validation
+  commands.
+
+Each module `CLAUDE.md` must contain exactly:
+
+```text
+@AGENTS.md
+```
+
+Store project-specific Agent Skills canonically under
+`.agents/skills/<skill-name>/SKILL.md`. Add only skills that encode reusable,
+project-relevant workflows or domain knowledge; do not copy generic
+instructions already covered by `AGENTS.md`. Expose each canonical skill to
+Claude with a relative symlink:
+
+```text
+.claude/skills/<skill-name> -> ../../.agents/skills/<skill-name>
+```
+
+Do not maintain duplicate skill copies. Commit the canonical skills and
+symlinks, and verify every symlink resolves from a fresh checkout.
 
 Add `.env.example` with placeholders only. Include the pooled database URL, the
 direct database URL used for migrations, the Supabase URL and publishable key,
@@ -328,4 +382,9 @@ Also verify:
 - shadcn primitives remain under `src/components/ui`;
 - API Route Handlers delegate to `src/lib` domain modules;
 - server-prefetched and browser-fetched query keys and contracts match;
+- the root `AGENTS.md` and each substantial module's `AGENTS.md` describe the
+  relevant goal, domain model, and architecture;
+- every root or module `CLAUDE.md` contains only `@AGENTS.md`;
+- project-specific skills live under `.agents/skills`, and every corresponding
+  `.claude/skills` symlink resolves;
 - only one package-manager lockfile exists.
