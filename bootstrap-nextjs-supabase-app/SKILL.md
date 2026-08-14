@@ -1,6 +1,6 @@
 ---
 name: bootstrap-nextjs-supabase-app
-description: Bootstrap and structure a production-oriented full-stack Next.js App Router project using pnpm, TypeScript, Supabase Auth and Postgres, Drizzle ORM, Zod, TanStack React Query, Tailwind CSS, and shadcn/ui. Use when starting, scaffolding, or standardizing a new web application that should follow API-first data access, Zod-validated contracts, Advanced SSR query hydration, domain-first source organization, authenticated Route Handlers, Drizzle-owned migrations, and documented architecture conventions.
+description: Bootstrap and structure a production-oriented full-stack Next.js App Router project using pnpm, TypeScript, Supabase Auth and Postgres, Drizzle ORM, Zod, TanStack React Query, Tailwind CSS, and shadcn/ui. Use when starting, scaffolding, or standardizing a new web application that should follow API-first data access, Zod-validated contracts, Advanced SSR query hydration, domain-first source organization, layered domain modules with an explicit dependency direction, authenticated Route Handlers, Drizzle-owned migrations, and documented architecture conventions.
 ---
 
 # Bootstrap a Next.js Supabase App
@@ -37,9 +37,9 @@ Start with this ownership model and adapt domain names to the product:
 AGENTS.md                       # application and repository instructions
 CLAUDE.md                       # contains @AGENTS.md
 .agents/
-└── skills/                       # canonical project Agent Skills
+└── skills/                     # canonical project Agent Skills
 .claude/
-└── skills/                       # symlinks to .agents/skills/*
+└── skills/                     # symlinks to .agents/skills/*
 drizzle/                        # generated migrations + meta, committed
 src/
 ├── app/
@@ -66,10 +66,14 @@ src/
 └── lib/
     ├── auth.ts
     ├── env.ts
-    └── <domain>/
+    └── <domain>/               # starts flat, splits by concept as it grows
         ├── contract.ts
         ├── filters.ts
-        └── query.ts
+        ├── query.ts
+        ├── domain.ts           # add when rules outgrow a query
+        ├── service.ts          # add when a use case does more than one thing
+        ├── errors.ts           # add when failures need distinct handling
+        └── index.ts            # add when other domains consume this one
 ```
 
 - Keep pages, layouts, server actions, React Query code, SSR prefetching, and
@@ -93,6 +97,132 @@ src/
   accidental client import. Apply it unconditionally to `src/db/*` and every
   `src/lib/<domain>/query.ts`, since those are the modules a client import would
   most expensively leak.
+
+## Layer each domain module
+
+Depend in one direction: `src/app` → `src/lib/<domain>` → `src/db`. Routes,
+components, server actions, and prefetches call into a domain module; a domain
+module never imports from `src/app`, and nothing outside `src/lib/<domain>` and
+`src/db` imports the Drizzle client. This single rule is what keeps a
+fast-moving prototype from decaying into ad-hoc queries scattered through the
+component tree.
+
+Add layers when a use case demands one, not preemptively. Each layer owns one job:
+
+| Layer | Owns | Add it |
+| --- | --- | --- |
+| `contract` | Zod schemas and inferred types | always |
+| `query` | bounded Drizzle reads and writes | always |
+| `filters` | list filtering, sorting, and pagination inputs | when lists take parameters |
+| `domain` | pure rules: invariants, derivations, state transitions | when rules outgrow a single query |
+| `service` | orchestration across queries, domains, or external systems | when a use case does more than one thing |
+| `errors` | typed domain errors | when failures need distinct handling |
+| `index` | the module's public surface | when another domain consumes it |
+
+Start each layer as a single file and promote it to a folder the moment it holds
+more than one concept. A `query.ts` that accumulates every read in the domain
+becomes the same catch-all as a root-level `queries/` directory, only harder to
+notice:
+
+```text
+src/lib/projects/
+├── contract.ts
+├── errors.ts
+├── index.ts                    # the public surface; everything else is internal
+├── domain/
+│   ├── publishing.ts           # named for the concept, not the layer
+│   └── quota.ts
+├── queries/
+│   ├── list-projects.ts
+│   └── get-project-for-owner.ts
+└── services/
+    ├── publish-project.ts
+    └── transfer-ownership.ts
+```
+
+- Name files in kebab-case after the operation or concept they contain, so
+  `publish-project.ts` exports `publishProject`. One exported use case per file
+  in `services/` keeps merge conflicts and blast radius small.
+- Do not stutter or restate the layer: inside `lib/projects/services/`, a file
+  named `project-service.ts` carries no information the path did not already
+  give. Reserve suffixes for when the folder does not disambiguate.
+- Re-export the intended entry points from `index.ts` and treat every other file
+  as module-internal, so the public surface is a deliberate list rather than
+  whatever happens to be exported.
+
+Apply these design rules:
+
+- Write query functions as named, task-specific operations — `listActiveProjects`,
+  `getProjectForOwner` — rather than a generic repository over a table. The
+  Drizzle query builder is already the persistence abstraction, and wrapping it
+  in a `Repository<T>` interface costs composition (partial selects, joins,
+  relational `with`) while buying a mockability that a disposable test database
+  supplies more honestly.
+- Do not create a service that only forwards to one query. A pass-through layer
+  adds a file to every change without ever making a decision. Let thin resources
+  run Route Handler → `query.ts`, and introduce `service.ts` at the moment a use
+  case spans two writes, an external call, or a cross-domain rule.
+- Keep `domain.ts` free of I/O. Pure functions over plain data are trivial to
+  test and compose cleanly into services.
+- Model the domain as plain data plus pure functions rather than as a third
+  representation sitting between the Drizzle row and the contract. The schema
+  carries shape and constraints, the contracts carry what crosses each edge, and
+  pure functions carry invariants and state transitions — a separate entity class
+  would add mappers in both directions, and the contract rules already forbid
+  class instances in payloads.
+- Use `interface` and `type` freely for the seams between modules; they are
+  structural and erased at runtime, so a contract costs nothing and needs no
+  `implements`, registration, or container. Reach for a class only where runtime
+  identity matters: typed errors that callers narrow with `instanceof`, and
+  stateful adapters holding a connection or client.
+- Express values with invariants as Zod branded types rather than value-object
+  classes, so the same value survives serialization across the API and SSR
+  boundaries instead of degrading into a bare object on the way out.
+- Name functions in the language of the product — `publishProject`,
+  `suspendAccount` — rather than CRUD verbs over tables. In this stack the
+  function name is where the ubiquitous language actually lives.
+- Accept the database handle as the first parameter (`db: Database | Transaction`)
+  so any query composes into a larger unit of work. Open transactions in
+  `service.ts` with `db.transaction(...)`; never inside a `query.ts` function, or
+  two of them can never be combined atomically.
+- Put authentication in the Route Handler and authorization in the domain loader.
+  Identity is an HTTP concern, but "may this actor see this row" is a domain rule
+  that the SSR prefetch path must enforce identically — and a loader that
+  requires an actor id cannot accidentally be called without one.
+- Let a domain module call another domain's public loader, never its tables or
+  internal helpers. A narrow cross-domain surface stays refactorable; reaching
+  into a neighbour's schema silently merges the two domains.
+- Throw typed domain errors and translate them to status codes in the Route
+  Handler. HTTP vocabulary inside `src/lib` makes the same function unusable from
+  a prefetch, a background job, or a script.
+- Treat the domain loader, not the URL, as the architectural boundary. `/api/*`
+  is one consumer and SSR prefetch is another; a server component rendering a
+  public marketing page or a one-shot detail view with no client interactivity
+  may call a loader directly. Requiring a network hop for data that never
+  refetches adds latency without adding a boundary.
+- Enforce these import rules mechanically with `server-only` plus a lint rule
+  restricting imports of `src/db` outside `src/lib/<domain>`. Conventions that
+  live only in a document decay under deadline.
+
+Test each layer the way its dependencies allow:
+
+- Call pure rule functions directly with plain inputs. They need no fixtures,
+  database, or test doubles, which is why rules worth protecting belong there.
+- Run query tests against real Postgres — an in-process instance such as
+  `pglite`, a container, or a disposable branch. A substituted repository only
+  asserts that the substitute behaves like itself, while the defects this layer
+  actually produces are wrong joins, missing ownership filters, unbounded reads,
+  and per-row queries, none of which survive contact with a real planner.
+- Pass service dependencies as a typed parameter object rather than resolving
+  them from a container, so a test supplies a real transaction alongside a
+  recording implementation of the external system and asserts on both.
+- When one dependency set recurs across many call sites, export a
+  `create<Domain>Service(deps)` factory returning the use-case functions. This is
+  constructor injection expressed as a closure and keeps the composition root
+  explicit without introducing a resolution framework.
+- Cover Route Handlers with request-level tests for authentication, input
+  rejection, and status mapping only. Their business assertions belong to the
+  loader they delegate to, which both `/api` and the SSR prefetch share.
 
 ## Define contracts and validate with Zod
 
@@ -298,6 +428,8 @@ Always create a root `AGENTS.md` that records:
   and data flow, integration points, and major design decisions;
 - the selected technologies and pinned package manager;
 - the route-first frontend and domain-first API boundaries;
+- the dependency direction, the layer-by-need rules for `src/lib/<domain>`, and
+  where transactions and authorization are owned;
 - the API-first, Zod contract, and React Query Advanced SSR rules;
 - authentication, authorization, callback routes, RLS, and secret-handling
   constraints;
@@ -378,6 +510,19 @@ Also verify:
   and they apply cleanly to a fresh database;
 - migrations contain no DDL for Supabase-owned schemas;
 - no client component imports `src/db` or a server query implementation;
+- no module outside `src/lib/<domain>` and `src/db` imports the Drizzle client,
+  and no domain module imports from `src/app`;
+- no domain module reaches into another domain's tables or internal helpers;
+- query functions accept a transaction handle, and transactions open in services
+  rather than inside individual queries;
+- no service exists that only forwards to a single query, and no pure rule module
+  performs I/O;
+- no layer file holds more than one concept, and each domain's public surface is
+  re-exported from its `index.ts` rather than imported file by file;
+- service dependencies arrive as parameters, and query tests run against a real
+  Postgres instance rather than a substituted repository;
+- authorization is enforced inside the domain loader, not only in the Route
+  Handler;
 - React Query imports and browser transports remain under `src/app`;
 - shadcn primitives remain under `src/components/ui`;
 - API Route Handlers delegate to `src/lib` domain modules;
