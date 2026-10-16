@@ -1,0 +1,22 @@
+{
+  "WORKFLOW_NAME": "Calendly Handle Meeting Events - ExampleClient",
+  "WEBHOOK_PATH": "handle-calendly-exampleclient",
+  "WEBHOOK_SECRET": "generate-a-fresh-random-secret-per-client-never-commit-it",
+  "CALENDLY_USER_URI": "https://api.calendly.com/users/00000000-0000-0000-0000-000000000000",
+  "EVENT_TYPE_URI": "https://api.calendly.com/event_types/00000000-0000-0000-0000-000000000000",
+  "SHEET_ID": "exampleSpreadsheetId",
+  "TAB1_NAME": "Leads",
+  "TAB1_LIST_VALUE": "gid=0",
+  "TAB1_GID": 0,
+  "TAB2_NAME": "LinkedIn Leads",
+  "TAB2_LIST_VALUE": "123456789",
+  "TAB2_GID": 123456789,
+  "DEFAULT_LINK_GID": 0,
+  "SHEETS_CREDENTIAL_ID": "exampleSheetsCredId",
+  "SHEETS_CREDENTIAL_NAME": "Marly Google Sheets",
+  "SLACK_CHANNEL_ID": "C0000000000",
+  "SLACK_CHANNEL_NAME": "marlink-exampleclient",
+  "SLACK_CREDENTIAL_ID": "exampleSlackCredId",
+  "SLACK_CREDENTIAL_NAME": "Marly n8n Bot",
+  "DASHBOARD_LABEL": "ExampleClient Leads Dashboard"
+}
