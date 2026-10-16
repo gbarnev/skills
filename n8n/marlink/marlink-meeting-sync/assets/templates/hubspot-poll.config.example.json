@@ -1,0 +1,21 @@
+{
+  "WORKFLOW_NAME": "HubSpot Handle Meeting Events - ExampleClient",
+  "HUBSPOT_CREDENTIAL_ID": "exampleHubspotCredId",
+  "HUBSPOT_CREDENTIAL_NAME": "HubSpot ExampleClient",
+  "SCHEDULING_PAGE_ID": "1234567",
+  "LOOKBACK_DAYS": 3,
+  "INTERNAL_EMAIL_DOMAINS": ["exampleclient.com"],
+  "STATE_TABLE_ID": "exampleStateTableId",
+  "STATE_TABLE_NAME": "HubSpot ExampleClient Meetings",
+  "SHEET_ID": "exampleSpreadsheetId",
+  "TAB_NAME": "Leads",
+  "TAB_LIST_VALUE": "gid=0",
+  "TAB_GID": 0,
+  "SHEETS_CREDENTIAL_ID": "exampleSheetsCredId",
+  "SHEETS_CREDENTIAL_NAME": "Marly Google Sheets",
+  "SLACK_CHANNEL_ID": "C0000000000",
+  "SLACK_CHANNEL_NAME": "marlink-exampleclient",
+  "SLACK_CREDENTIAL_ID": "exampleSlackCredId",
+  "SLACK_CREDENTIAL_NAME": "Marly n8n Bot",
+  "DASHBOARD_LABEL": "ExampleClient Leads Dashboard"
+}
