@@ -190,7 +190,7 @@ const splitMatches = node({
     parameters: { fieldToSplitOut: 'matches', include: 'selectedOtherFields', fieldsToInclude: 'gSheetStatus,parsedStartTime', options: {} },
     position: [2420, -200]
   },
-  output: [{ sheetName: 'Leads', gid: 0, row_number: 2, gSheetStatus: 'Meeting', parsedStartTime: '2026-10-20 10:00:00' }]
+  output: [{ matches: { sheetName: 'Leads', gid: 0, row_number: 2 }, gSheetStatus: 'Meeting', parsedStartTime: '2026-10-20 10:00:00' }]
 });
 
 const updateLeadMeeting = node({
@@ -203,11 +203,11 @@ const updateLeadMeeting = node({
       resource: 'sheet',
       operation: 'update',
       documentId: { __rl: true, mode: 'id', value: '__SHEET_ID__' },
-      sheetName: { __rl: true, mode: 'name', value: expr('{{ $json.sheetName }}') },
+      sheetName: { __rl: true, mode: 'name', value: expr('{{ $json.matches.sheetName }}') },
       columns: {
         mappingMode: 'defineBelow',
         value: {
-          row_number: expr('{{ $json.row_number }}'),
+          row_number: expr('{{ $json.matches.row_number }}'),
           'Deal Stage': expr('{{ $json.gSheetStatus }}'),
           'Meeting Date & ET Time': expr('{{ $json.parsedStartTime }}')
         },

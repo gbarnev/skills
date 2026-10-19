@@ -48,6 +48,10 @@ token (name it e.g. "<Client> Calendly Bearer API Token" / "HubSpot <Client>") a
 - `executeOnce: true` on reads that sit after a multi-item node (otherwise they run once per item).
 - Google Sheets **update**: match on `row_number`; for multi-tab clients the tab comes from the item
   (`sheetName` mode `name`, `={{ $json.sheetName }}`).
+- Split Out keeps an object element flat only with `include: 'noOtherFields'`. With
+  `selectedOtherFields` (calendly-poll's `Split Out Matches`) it nests it under the field name, so the
+  update reads `$json.matches.sheetName` / `$json.matches.row_number`. Reading `$json.sheetName` there
+  fails with "Sheet with name undefined not found" on the first matched lead and blocks the Slack post.
 - Slack `blocksUi` must evaluate to an object: `={{ { "text": …, "blocks": [ … ] } }}` (a bare array or
   a string-built JSON posts plain text or breaks on quotes in names).
 - Webhook raw body: Webhook `options.rawBody: true`; any Set node before the Code node needs
