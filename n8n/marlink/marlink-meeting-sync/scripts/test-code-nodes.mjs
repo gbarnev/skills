@@ -35,7 +35,7 @@ const defaultConfig = {
   ...JSON.parse(fs.readFileSync(path.join(templatesDir, 'hubspot-poll.config.example.json'), 'utf8')),
 };
 const config = process.argv[2] ? { ...defaultConfig, ...JSON.parse(fs.readFileSync(process.argv[2], 'utf8')) } : defaultConfig;
-const code = (name) => fill(fs.readFileSync(path.join(codeDir, name), 'utf8'), config, name);
+const code = (name, overrides = {}) => fill(fs.readFileSync(path.join(codeDir, name), 'utf8'), { ...config, ...overrides }, name);
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const run = (src, globals, self = {}) =>
@@ -123,6 +123,17 @@ const T2 = '2026-10-14T15:00:00Z';
       $input: input(rows.map((r) => (r.start_time ? { ...r, start_time: '2026-10-13T14:00:00.000000Z' } : r))),
     });
     check(`calendly detect: ${name}`, out.length ? out[0].json.event : null, want);
+  }
+  const zones = [
+    ['America/New_York', 'ET', ['2026-10-13 10:00:00', 'Tuesday, 13 Oct 2026 10:00 AM ET']],
+    ['Europe/Sofia', '(Sofia)', ['2026-10-13 17:00:00', 'Tuesday, 13 Oct 2026 5:00 PM (Sofia)']],
+  ];
+  for (const [zone, label, want] of zones) {
+    const [booked] = await run(code('calendly-poll-detect-changes.js', { TIME_ZONE: zone, TIME_ZONE_LABEL: label }), {
+      $: nodes({ 'Filter Event Type': [{ uri: 'E1', start_time: '2026-10-13T14:00:00.000000Z' }], 'Get Invitees': [{ collection: [invitee()] }] }),
+      $input: input([]),
+    });
+    check(`calendly detect: ${zone} formatting`, [booked.json.parsedStartTime, booked.json.parsedStartTimeSlack], want);
   }
 }
 
