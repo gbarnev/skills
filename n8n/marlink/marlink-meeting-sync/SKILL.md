@@ -26,6 +26,10 @@ short intake plus a render-validate-create pass instead of a rebuild.
   that matches.
 - **Sheet write**: `Deal Stage` and `Meeting Date & ET Time` (`yyyy-MM-dd HH:mm:ss`, America/New_York),
   matched on `row_number`. Nothing else in the row is touched.
+- **Time zone**: ET by default. Clients who meet on Bulgarian time (Orender AI, Orbis) use Sofia time,
+  the Slack suffix `(Sofia)` and a `Meeting Date & BG Time` column. Signs: booking start times in
+  European office hours, Bulgarian sheet headers; ask the user when unsure. `calendly-poll` takes this
+  from `TIME_ZONE`, `TIME_ZONE_LABEL` and `TIME_COLUMN`; the other templates still hard-code ET.
 - **Slack** (block message, posted as the shared bot):
   `*<Tool> Update*: ✅ Booked` / `*Lead:* [NOT IN DASHBOARD] Jane Doe, jane@acme.com` /
   `*Meeting Time:* Tuesday, 20 Oct 2026 10:00 AM ET` / link `<Client> Leads Dashboard`.
@@ -66,8 +70,8 @@ Ask the user only for what you can't discover:
 5. **The Slack channel.** The bot must be in it: `/invite @Marly n8n Bot`.
 
 Then ask the user to do two things only they can do:
-- Add a `Meeting Date & ET Time` column to each tracked tab. You can read their sheets through n8n, but
-  you shouldn't restructure a client's sheet.
+- Add a `Meeting Date & ET Time` column (or the client's `TIME_COLUMN`) to each tracked tab. You can
+  read their sheets through n8n, but you shouldn't restructure a client's sheet.
 - Create an n8n **Bearer Auth** credential holding the token and tell you its name. The n8n MCP can't
   create credentials, and tokens must live in credentials, not in node fields.
 

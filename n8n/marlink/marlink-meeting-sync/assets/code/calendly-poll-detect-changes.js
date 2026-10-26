@@ -33,7 +33,7 @@ events.forEach((event, index) => {
     if (previous && previous.status === state.status && previous.start_time === state.start_time && previous.no_show === state.no_show) continue;
 
     const kind = detectEvent(invitee, state, previous);
-    const start = DateTime.fromISO(event.start_time).setZone('America/New_York');
+    const start = DateTime.fromISO(event.start_time).setZone('__TIME_ZONE__');
     changes.push({
       json: {
         inviteeUri: invitee.uri,
@@ -46,7 +46,7 @@ events.forEach((event, index) => {
         leadEmail: invitee.email ?? '',
         calendlyName: invitee.name || [invitee.first_name, invitee.last_name].filter(Boolean).join(' '),
         parsedStartTime: start.isValid ? start.toFormat('yyyy-MM-dd HH:mm:ss') : '',
-        parsedStartTimeSlack: start.isValid ? start.toFormat('cccc, dd MMM yyyy h:mm a') + ' ET' : '',
+        parsedStartTimeSlack: start.isValid ? start.toFormat('cccc, dd MMM yyyy h:mm a') + ' __TIME_ZONE_LABEL__' : '',
       },
     });
   }

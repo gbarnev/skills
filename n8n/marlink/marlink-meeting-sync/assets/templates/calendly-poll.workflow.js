@@ -209,12 +209,12 @@ const updateLeadMeeting = node({
         value: {
           row_number: expr('{{ $json.matches.row_number }}'),
           'Deal Stage': expr('{{ $json.gSheetStatus }}'),
-          'Meeting Date & ET Time': expr('{{ $json.parsedStartTime }}')
+          '__TIME_COLUMN__': expr('{{ $json.parsedStartTime }}')
         },
         matchingColumns: ['row_number'],
         schema: [
           { id: 'Deal Stage', displayName: 'Deal Stage', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true, removed: false },
-          { id: 'Meeting Date & ET Time', displayName: 'Meeting Date & ET Time', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true, removed: false },
+          { id: '__TIME_COLUMN__', displayName: '__TIME_COLUMN__', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true, removed: false },
           { id: 'row_number', displayName: 'row_number', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: true, readOnly: true, removed: false }
         ],
         attemptToConvertTypes: false,
