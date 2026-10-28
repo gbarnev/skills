@@ -27,6 +27,9 @@ token (name it e.g. "<Client> Calendly Bearer API Token" / "HubSpot <Client>") a
   `scripts/render-workflow.mjs` — the rendered `jsCode` is one string literal.
 - Expressions: `expr('…')` with single/double quotes, never backticks. Inside a single-quoted `expr`,
   a newline in the *resulting expression string* is written `\\n`.
+- No apostrophes in `//` comments in workflow code. `validate_workflow` strips comments before parsing,
+  and a `'` in one (e.g. "item's") throws off its quote tracking: it fails later with "Expecting Unicode
+  escape sequence \uXXXX" on an unrelated line that now reads `[\'row_number\']`.
 - Every node needs an `output` sample; warnings like `INVALID_EXPRESSION_PATH … no predecessor outputs
   this field` come from those samples and are harmless.
 - `TOP_LEVEL_ITEMS_OVER_CEILING` (grouping) is cosmetic. `PLAIN_GENERIC_AUTH` on HTTP nodes is fine when
@@ -48,6 +51,13 @@ token (name it e.g. "<Client> Calendly Bearer API Token" / "HubSpot <Client>") a
 - `executeOnce: true` on reads that sit after a multi-item node (otherwise they run once per item).
 - Google Sheets **update**: match on `row_number`; for multi-tab clients the tab comes from the item
   (`sheetName` mode `name`, `={{ $json.sheetName }}`).
+- The Sheets v2 node reads `sheetName` **from item 0 only** (`router.ts`:
+  `getNodeParameter('sheetName', 0, …)`) and writes every item's `row_number` into that one tab. Feed
+  it several matches from different tabs (a lead in two tabs, or two bookings in one poll) and the
+  later rows are written into the first item's tab, silently changing the wrong lead. The templates
+  therefore put `Loop Over Matches` (Split In Batches v3, `batchSize: 1`) between the Split Out and
+  `Update Lead Meeting`, giving each match its own node run. Keep this loop when cloning or editing a
+  multi-tab workflow.
 - Split Out keeps an object element flat only with `include: 'noOtherFields'`. With
   `selectedOtherFields` (calendly-poll's `Split Out Matches`) it nests it under the field name, so the
   update reads `$json.matches.sheetName` / `$json.matches.row_number`. Reading `$json.sheetName` there
