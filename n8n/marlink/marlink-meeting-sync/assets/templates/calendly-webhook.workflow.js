@@ -1,4 +1,4 @@
-import { workflow, node, trigger, ifElse, expr } from '@n8n/workflow-sdk';
+import { workflow, node, trigger, ifElse, splitInBatches, nextBatch, expr } from '@n8n/workflow-sdk';
 
 const webhook = trigger({
   type: 'n8n-nodes-base.webhook',
@@ -197,6 +197,13 @@ const splitOutMatches = node({
   output: [{ sheetName: 'Leads', gid: 0, row_number: 2 }]
 });
 
+// One match per run of Update Lead Meeting: the Sheets node reads sheetName from item 0 only,
+// so a lead found in two tabs would have both rows written into the tab of the first match.
+const loopMatches = splitInBatches({
+  version: 3,
+  config: { name: 'Loop Over Matches', parameters: { batchSize: 1, options: {} }, position: [2420, -200] }
+});
+
 const updateLeadMeeting = node({
   type: 'n8n-nodes-base.googleSheets',
   version: 4.7,
@@ -227,7 +234,7 @@ const updateLeadMeeting = node({
       options: {}
     },
     credentials: { googleSheetsOAuth2Api: { id: '__SHEETS_CREDENTIAL_ID__', name: '__SHEETS_CREDENTIAL_NAME__' } },
-    position: [2420, -200]
+    position: [2640, -200]
   },
   output: [{ row_number: 2, 'Deal Stage': 'Meeting', 'Meeting Date & ET Time': '2026-10-20 10:00:00' }]
 });
@@ -263,6 +270,6 @@ export default workflow('calendly-meeting-events-webhook', '__WORKFLOW_NAME__')
     .onTrue(filterEventType.to(parseProperties.to(getTab1Rows.to(getTab2Rows.to(findLeadRows)))))
     .onFalse(stopAndError))
   .add(findLeadRows)
-  .to(splitOutMatches.to(updateLeadMeeting))
+  .to(splitOutMatches.to(loopMatches.onEachBatch(updateLeadMeeting.to(nextBatch(loopMatches)))))
   .add(findLeadRows)
   .to(sendSlackMessage);
