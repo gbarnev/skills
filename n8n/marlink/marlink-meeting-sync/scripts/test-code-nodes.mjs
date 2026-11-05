@@ -33,6 +33,7 @@ const require = createRequire(import.meta.url);
 const defaultConfig = {
   ...JSON.parse(fs.readFileSync(path.join(templatesDir, 'calendly-poll.config.example.json'), 'utf8')),
   ...JSON.parse(fs.readFileSync(path.join(templatesDir, 'hubspot-poll.config.example.json'), 'utf8')),
+  ...JSON.parse(fs.readFileSync(path.join(templatesDir, 'zoho-poll.config.example.json'), 'utf8')),
 };
 const config = process.argv[2] ? { ...defaultConfig, ...JSON.parse(fs.readFileSync(process.argv[2], 'utf8')) } : defaultConfig;
 const code = (name, overrides = {}) => fill(fs.readFileSync(path.join(codeDir, name), 'utf8'), { ...config, ...overrides }, name);
@@ -150,6 +151,52 @@ const T2 = '2026-10-14T15:00:00Z';
   check('calendly match: not in dashboard', [out[0].json.gSheetLead, out[0].json.leadName], [null, 'Jane Doe']);
   check('calendly match: found in second tab', [out[1].json.matches.map((m) => `${m.sheetName}:${m.row_number}`), out[1].json.leadName], [[`${config.TAB2_NAME}:9`], 'Bob B']);
   check('calendly match: link points at matched tab', out[1].json.dashboardUrl.endsWith(`gid=${config.TAB2_GID}#gid=${config.TAB2_GID}`), true);
+}
+
+// Zoho Bookings polling: Detect Changes
+{
+  const src = code('zoho-poll-detect-changes.js');
+  const appt = (status, start = T1) => ({ booking_id: '#IN-00001', status, iso_start_time: start, customer_email: 'jane@acme.com', customer_name: 'Jane Doe' });
+  const known = (status, start = T1) => ({ booking_id: '#IN-00001', status, start_time: start });
+  const detect = (returnvalue, rows, source = src) => run(source, { $: nodes({ 'Fetch Appointments': [{ response: { returnvalue } }] }), $input: input(rows) });
+  const cases = [
+    ['new booking', appt('upcoming'), [{}], 'booked'],
+    ['unchanged', appt('upcoming'), [known('upcoming')], null],
+    ['meeting passed unmarked (silent)', appt('yet_to_mark'), [known('upcoming')], ''],
+    ['cancelled', appt('cancel'), [known('upcoming')], 'canceled'],
+    ['booked and cancelled between checks', appt('cancel'), [], 'canceled'],
+    ['cancelled, time changed', appt('cancel', T2), [known('cancel')], ''],
+    ['time moved', appt('upcoming', T2), [known('upcoming')], 'rescheduled'],
+    ['no-show', appt('no_show'), [known('yet_to_mark')], 'no_show'],
+    ['no-show removed (completed)', appt('completed'), [known('no_show')], 'no_show_removed'],
+    ['completed', appt('completed'), [known('yet_to_mark')], ''],
+    ['re-booked after cancel', appt('upcoming'), [known('cancel')], 'booked'],
+  ];
+  for (const [name, a, rows, want] of cases) {
+    const out = await detect({ response: [a], next_page_available: false }, rows);
+    check(`zoho detect: ${name}`, out.length ? out[0].json.event : null, want);
+  }
+  check('zoho detect: "No Match Found" means no bookings', (await detect({ response: 'No Match Found' }, [])).length, 0);
+  let pagingError = '';
+  try { await detect({ response: [appt('upcoming')], next_page_available: true }, []); } catch (e) { pagingError = e.message; }
+  check('zoho detect: second page fails loudly', pagingError.includes('more than one page'), true);
+  const berlin = code('zoho-poll-detect-changes.js', { TIME_ZONE: 'Europe/Berlin', TIME_ZONE_LABEL: '(Berlin)' });
+  const [booked] = await detect({ response: [appt('upcoming', '2026-11-05T10:00:00+00:00')] }, [], berlin);
+  check('zoho detect: Berlin formatting', [booked.json.parsedStartTime, booked.json.parsedStartTimeSlack], ['2026-11-05 11:00:00', 'Thursday, 05 Nov 2026 11:00 AM (Berlin)']);
+}
+
+// Zoho Bookings polling: Match Leads
+{
+  const src = code('zoho-poll-match-leads.js');
+  const out = await run(src, {
+    $: nodes({
+      'Detect Changes': [{ leadEmail: 'Jane@Acme.com', bookingName: 'Jane Doe', event: 'booked' }, { leadEmail: 'nobody@z.com', bookingName: '', event: 'booked' }],
+      [`Get ${config.TAB1_NAME} Rows`]: [{ row_number: 4, Email: 'x@y.com, jane@acme.com', 'First Name': 'Jane' }],
+      [`Get ${config.TAB2_NAME} Rows`]: [{}],
+    }),
+  });
+  check('zoho match: found in first tab', [out[0].json.matches.map((m) => `${m.sheetName}:${m.row_number}`), out[0].json.leadName], [[`${config.TAB1_NAME}:4`], 'Jane Doe']);
+  check('zoho match: not in dashboard', [out[1].json.gSheetLead, out[1].json.leadName], [null, 'Unknown']);
 }
 
 // Calendly webhook: signature check

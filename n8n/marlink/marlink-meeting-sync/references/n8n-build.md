@@ -19,6 +19,7 @@ Read this before rendering/creating a workflow, and when debugging a failed exec
 
 The MCP **cannot create credentials**. Ask the user to add a **Bearer Auth** credential with the
 token (name it e.g. "<Client> Calendly Bearer API Token" / "HubSpot <Client>") and tell you the name.
+Zoho Bookings uses a **Custom Auth** credential instead (JSON in `references/zoho-bookings.md`).
 
 ## SDK code rules that bit us
 
@@ -32,8 +33,8 @@ token (name it e.g. "<Client> Calendly Bearer API Token" / "HubSpot <Client>") a
 - `TOP_LEVEL_ITEMS_OVER_CEILING` (grouping) is cosmetic. `PLAIN_GENERIC_AUTH` on HTTP nodes is fine when
   you attach an existing Bearer credential.
 - `create_workflow_from_code` skips HTTP Request nodes during credential auto-assignment — always run
-  `setNodeCredential` for every credentialed node afterwards (`credentialKey` = `httpBearerAuth`,
-  `googleSheetsOAuth2Api`, `slackApi`).
+  `setNodeCredential` for every credentialed node afterwards (`credentialKey` = `httpBearerAuth` or, for
+  Zoho, `httpCustomAuth`; `googleSheetsOAuth2Api`, `slackApi`).
 - `setWorkflowSettings`: `errorWorkflow` (copy from an existing meeting workflow),
   `callerPolicy: workflowsFromSameOwner`, `executionOrder: v1`. Moving to a folder:
   `move_workflows_to_folder` (or `folderId` at creation).
@@ -52,6 +53,9 @@ token (name it e.g. "<Client> Calendly Bearer API Token" / "HubSpot <Client>") a
   `selectedOtherFields` (calendly-poll's `Split Out Matches`) it nests it under the field name, so the
   update reads `$json.matches.sheetName` / `$json.matches.row_number`. Reading `$json.sheetName` there
   fails with "Sheet with name undefined not found" on the first matched lead and blocks the Slack post.
+- The Sheets update reads its tab (`sheetName`) from the first item only, so a lead matched in two
+  tabs would get both writes in one tab. The multi-tab templates update through `Loop Over Matches`
+  (Split In Batches, batch size 1); `hubspot-poll` writes to one fixed tab and doesn't need it.
 - Slack `blocksUi` must evaluate to an object: `={{ { "text": …, "blocks": [ … ] } }}` (a bare array or
   a string-built JSON posts plain text or breaks on quotes in names).
 - Webhook raw body: Webhook `options.rawBody: true`; any Set node before the Code node needs

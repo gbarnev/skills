@@ -1,6 +1,6 @@
 ---
 name: marlink-meeting-sync
-description: Build, clone or debug Marlink's n8n "Handle Meeting Events" automations that sync a client's booking tool (Calendly or HubSpot Meetings) into the client's Leads Dashboard Google Sheet (Deal Stage + "Meeting Date & ET Time") and post booked / cancelled / rescheduled / no-show updates to the client's Slack channel, flagging unknown leads as "[NOT IN DASHBOARD]". Use whenever the user wants to connect a new Marlink or Marlink Accelerate client, says "integrate" or "do the same as the Calendly workflow" for a client, pastes a Calendly token or HubSpot service key together with a leads sheet or Slack channel, or asks why one of these meeting workflows failed — even if they don't name this skill.
+description: Build, clone or debug Marlink's n8n "Handle Meeting Events" automations that sync a client's booking tool (Calendly, HubSpot Meetings or Zoho Bookings) into the client's Leads Dashboard Google Sheet (Deal Stage + "Meeting Date & ET Time") and post booked / cancelled / rescheduled / no-show updates to the client's Slack channel, flagging unknown leads as "[NOT IN DASHBOARD]". Use whenever the user wants to connect a new Marlink or Marlink Accelerate client, says "integrate" or "do the same as the Calendly workflow" for a client, pastes a Calendly token, HubSpot service key or Zoho Self Client details together with a leads sheet or Slack channel, or asks why one of these meeting workflows failed — even if they don't name this skill.
 ---
 
 # Marlink meeting sync (n8n)
@@ -28,13 +28,14 @@ short intake plus a render-validate-create pass instead of a rebuild.
   matched on `row_number`. Nothing else in the row is touched.
 - **Time zone**: ET by default. Clients who meet on Bulgarian time (Orender AI, Orbis) use Sofia time,
   the Slack suffix `(Sofia)` and a `Meeting Date & BG Time` column. Signs: booking start times in
-  European office hours, Bulgarian sheet headers; ask the user when unsure. `calendly-poll` takes this
-  from `TIME_ZONE`, `TIME_ZONE_LABEL` and `TIME_COLUMN`; the other templates still hard-code ET.
+  European office hours, Bulgarian sheet headers; ask the user when unsure. `calendly-poll` and
+  `zoho-poll` take this from `TIME_ZONE`, `TIME_ZONE_LABEL` and `TIME_COLUMN`; the other templates
+  still hard-code ET.
 - **Slack** (block message, posted as the shared bot):
   `*<Tool> Update*: ✅ Booked` / `*Lead:* [NOT IN DASHBOARD] Jane Doe, jane@acme.com` /
   `*Meeting Time:* Tuesday, 20 Oct 2026 10:00 AM ET` / link `<Client> Leads Dashboard`.
   If the lead isn't in the sheet, post with the `[NOT IN DASHBOARD]` prefix and skip the sheet write.
-- **Where**: n8n folder **Marlink Accelerate**, name `<Calendly|HubSpot> Handle Meeting Events - <Client>`.
+- **Where**: n8n folder **Marlink Accelerate**, name `<Calendly|HubSpot|Zoho Bookings> Handle Meeting Events - <Client>`.
 - **Shared credentials**: Google Sheets "Marly Google Sheets", Slack "Marly n8n Bot". Look up their
   IDs with `list_credentials`. Reuse the error workflow set on the existing meeting workflows (read
   `settings.errorWorkflow` from one with `get_workflow_details`).
@@ -48,9 +49,11 @@ short intake plus a render-validate-create pass instead of a rebuild.
 | Calendly | paid plan (Standard or higher) | `calendly-webhook` — instant, HMAC-verified webhook |
 | Calendly | free plan (creating a webhook → 403 "Please upgrade your Calendly account to Standard") | `calendly-poll` — checks every 5 min |
 | HubSpot Meetings | service key / private-app token | `hubspot-poll` — checks every 5 min |
+| Zoho Bookings | any plan; Self Client refresh token | `zoho-poll` — checks every 10 min |
 
 HubSpot can only push events through the "Send a webhook" workflow action, which needs Data Hub
-Professional or Enterprise; polling avoids that cost. Polling variants keep a small **Data Table** of
+Professional or Enterprise; polling avoids that cost. Zoho could only push through a Deluge custom
+function inside the client's account (Premium plan); we don't maintain scripts in client accounts. Polling variants keep a small **Data Table** of
 what was already handled, which is what prevents duplicate Slack posts and lets each run look back days
 without re-announcing anything. When the choice involves money (a Calendly upgrade), ask the user;
 otherwise default to what works on the client's current plan.
@@ -64,6 +67,8 @@ Ask the user only for what you can't discover:
    - Calendly personal access token with `users:read`, `event_types:read`, `scheduled_events:read`
      (+ `webhooks:read`/`webhooks:write` for the webhook variant).
    - HubSpot service key: the `pat-…` string, not the numeric key ID.
+   - Zoho Bookings: a Self Client's Client ID, Client Secret and one-time code, plus the region. The code
+     expires within minutes; exchange it as soon as it arrives (`references/zoho-bookings.md`).
 3. **Which booking page / meeting type.** List them yourself, with recent booking counts, and recommend
    the active one.
 4. **The sheet URL**, and which tab(s) to search.
@@ -72,7 +77,8 @@ Ask the user only for what you can't discover:
 Then ask the user to do two things only they can do:
 - Add a `Meeting Date & ET Time` column (or the client's `TIME_COLUMN`) to each tracked tab. You can
   read their sheets through n8n, but you shouldn't restructure a client's sheet.
-- Create an n8n **Bearer Auth** credential holding the token and tell you its name. The n8n MCP can't
+- Create an n8n **Bearer Auth** credential holding the token (for Zoho, a **Custom Auth** credential
+  holding the refresh token; see `references/zoho-bookings.md`) and tell you its name. The n8n MCP can't
   create credentials, and tokens must live in credentials, not in node fields.
 
 Discover the rest yourself; `references/n8n-build.md` lists the exact MCP calls:
@@ -89,11 +95,13 @@ Discover the rest yourself; `references/n8n-build.md` lists the exact MCP calls:
    `references/hubspot.md`):
    - Calendly: user, organization and event-type URIs.
    - HubSpot: the scheduling page ID and the client's internal email domains.
+   - Zoho Bookings: the service ID (the booking link ends with it) and the accounts host of the region.
    - Check that the plan supports what you're about to build.
 2. **Polling variants: create the state Data Table and seed it** with the current state of every existing
    booking for the tracked page or event type. Otherwise the first run announces old meetings.
    - Columns for HubSpot: `meeting_id, outcome, start_time`.
    - Columns for Calendly: `invitee_uri, status, start_time, no_show`.
+   - Columns for Zoho Bookings: `booking_id, status, start_time`.
 3. **Write a config JSON** next to the template's `*.config.example.json`, but outside any git repo,
    because it may hold a webhook secret. Then render:
    `node scripts/render-workflow.mjs assets/templates/<variant>.workflow.js <config.json> <out.js>`.
@@ -150,5 +158,7 @@ so the first run processes it, but only with the user's OK.
   test request, reschedule and no-show semantics.
 - `references/hubspot.md`: service keys, booking pages, meeting properties, contact lookup, what HubSpot
   can't see, transient 500s.
+- `references/zoho-bookings.md`: Self Client token exchange, regions, the Custom Auth credential,
+  discovery, status values and API quirks, limits.
 - `references/n8n-build.md`: the MCP calls for each step, SDK validator traps, node behaviours the
   templates rely on, how to read failed executions.

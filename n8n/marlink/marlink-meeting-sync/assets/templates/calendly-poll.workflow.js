@@ -1,4 +1,4 @@
-import { workflow, node, trigger, ifElse, expr } from '@n8n/workflow-sdk';
+import { workflow, node, trigger, ifElse, splitInBatches, nextBatch, expr } from '@n8n/workflow-sdk';
 
 const scheduleTrigger = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
@@ -193,6 +193,9 @@ const splitMatches = node({
   output: [{ matches: { sheetName: 'Leads', gid: 0, row_number: 2 }, gSheetStatus: 'Meeting', parsedStartTime: '2026-10-20 10:00:00' }]
 });
 
+// The Sheets update resolves its tab from the first item only, so update one match at a time.
+const loopMatches = splitInBatches({ version: 3, config: { name: 'Loop Over Matches', parameters: { batchSize: 1, options: {} }, position: [2640, -200] } });
+
 const updateLeadMeeting = node({
   type: 'n8n-nodes-base.googleSheets',
   version: 4.7,
@@ -223,7 +226,7 @@ const updateLeadMeeting = node({
       options: {}
     },
     credentials: { googleSheetsOAuth2Api: { id: '__SHEETS_CREDENTIAL_ID__', name: '__SHEETS_CREDENTIAL_NAME__' } },
-    position: [2640, -200]
+    position: [2860, -200]
   },
   output: [{ row_number: 2, 'Deal Stage': 'Meeting' }]
 });
@@ -313,7 +316,7 @@ export default workflow('calendly-meeting-events-poll', '__WORKFLOW_NAME__')
   .to(getTab1Rows)
   .to(getTab2Rows)
   .to(matchLeads)
-  .to(hasSheetUpdate.to(splitMatches.to(updateLeadMeeting)))
+  .to(hasSheetUpdate.to(splitMatches.to(loopMatches.onEachBatch(updateLeadMeeting.to(nextBatch(loopMatches))))))
   .add(matchLeads)
   .to(shouldNotify
     .onTrue(sendSlackMessage.to(saveInviteeState))

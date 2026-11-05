@@ -1,4 +1,4 @@
-import { workflow, node, trigger, ifElse, expr } from '@n8n/workflow-sdk';
+import { workflow, node, trigger, ifElse, splitInBatches, nextBatch, expr } from '@n8n/workflow-sdk';
 
 const webhook = trigger({
   type: 'n8n-nodes-base.webhook',
@@ -197,6 +197,9 @@ const splitOutMatches = node({
   output: [{ sheetName: 'Leads', gid: 0, row_number: 2 }]
 });
 
+// The Sheets update resolves its tab from the first item only, so update one match at a time.
+const loopMatches = splitInBatches({ version: 3, config: { name: 'Loop Over Matches', parameters: { batchSize: 1, options: {} }, position: [2420, -200] } });
+
 const updateLeadMeeting = node({
   type: 'n8n-nodes-base.googleSheets',
   version: 4.7,
@@ -227,7 +230,7 @@ const updateLeadMeeting = node({
       options: {}
     },
     credentials: { googleSheetsOAuth2Api: { id: '__SHEETS_CREDENTIAL_ID__', name: '__SHEETS_CREDENTIAL_NAME__' } },
-    position: [2420, -200]
+    position: [2640, -200]
   },
   output: [{ row_number: 2, 'Deal Stage': 'Meeting', 'Meeting Date & ET Time': '2026-10-20 10:00:00' }]
 });
@@ -263,6 +266,6 @@ export default workflow('calendly-meeting-events-webhook', '__WORKFLOW_NAME__')
     .onTrue(filterEventType.to(parseProperties.to(getTab1Rows.to(getTab2Rows.to(findLeadRows)))))
     .onFalse(stopAndError))
   .add(findLeadRows)
-  .to(splitOutMatches.to(updateLeadMeeting))
+  .to(splitOutMatches.to(loopMatches.onEachBatch(updateLeadMeeting.to(nextBatch(loopMatches)))))
   .add(findLeadRows)
   .to(sendSlackMessage);
